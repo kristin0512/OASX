@@ -56,7 +56,7 @@ flutter test --dart-define=OASX_PREVIEW=true
 python -B -m unittest discover -s dev_tools -p test_ui_preview_server.py
 ```
 
-测试使用模拟接口、内存数据或独立临时目录，不读取用户后端配置或启动游戏。GitHub Actions 的发布配置沿用上游；仅打 `v*` 标签会执行发行流程。请先验证源码后再创建发行标签。
+测试使用模拟接口、内存数据或独立临时目录，不读取用户后端配置或启动游戏。本仓库目前提供源码，Windows 程序按上面的构建步骤生成；尚未配置 GitHub Actions 自动发行流程。
 
 ## 许可证
 
