@@ -37,7 +37,7 @@ final Map<String, String> _cn_global_game = {
   // ---------------------------------------------------------------------
   'costume_config': '游戏装饰自定义',
   'costume_main_type': '庭院皮肤',
-  'costume_main_type_help': '宠物屋不可用：[暖池青苑]、[枫色秋庭]',
+  'costume_main_type_help': '可选择多个庭院，自动识别当前使用的皮肤；至少保留一个。宠物屋不可用：[暖池青苑]、[枫色秋庭]',
   'costume_realm_type': '结界皮肤',
   'costume_realm_type_help': '测试阶段',
   'costume_theme_type': '主题',

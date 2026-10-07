@@ -273,6 +273,9 @@ class ArgsController extends GetxController {
           ? null
           : I18n.argsInvalidTimeDelta.tr,
       'enum' => _validateEnum(model, current),
+      'multi_enum' => value is List && value.isNotEmpty &&
+          value.every((item) => (model.enumEnum ?? const <String>[]).contains(item))
+          ? null : I18n.argsInvalidEnum.tr,
       _ => null,
     };
   }

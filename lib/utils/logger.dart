@@ -3,7 +3,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:path_provider/path_provider.dart';
+import 'package:oasx/service/profile_service.dart';
 import 'package:logger/logger.dart';
 
 late Logger logger;
@@ -36,11 +36,7 @@ Future<Directory> _resolveLogDirectory() async {
   if (kIsWeb) {
     throw UnsupportedError('Web does not support file-based logging.');
   }
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    final installDir = File(Platform.resolvedExecutable).parent.path;
-    return Directory('$installDir${Platform.pathSeparator}logs');
-  }
-  final appDocDir = await getApplicationCacheDirectory();
+  final appDocDir = await ProfileService.cacheDirectory();
   return Directory('${appDocDir.path}${Platform.pathSeparator}logs');
 }
 
@@ -68,18 +64,11 @@ Logger _getLogger(String logPath, String dateTime) {
   LogPrinter printer = SimplePrinter(printTime: true);
   //
   MultiOutput multiOutput = MultiOutput([
-    FileOutput(
-      file: File('$logPath/$dateTime.txt'),
-      encoding: utf8,
-    ),
+    FileOutput(file: File('$logPath/$dateTime.txt'), encoding: utf8),
     CustomConsoleOutput(),
   ]);
 
-  return Logger(
-    filter: filter,
-    printer: printer,
-    output: multiOutput,
-  );
+  return Logger(filter: filter, printer: printer, output: multiOutput);
 }
 
 Future<void> _cleanupOldLogs(String logDirPath) async {

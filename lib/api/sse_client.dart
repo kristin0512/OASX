@@ -2,22 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:oasx/service/profile_service.dart';
+
 /// Connection states reported by the generic SSE client.
-enum ApiSseConnectionState {
-  connecting,
-  connected,
-  reconnecting,
-  error,
-}
+enum ApiSseConnectionState { connecting, connected, reconnecting, error }
 
 /// One parsed SSE event.
 class ApiSseEvent {
   /// Creates an SSE event model.
-  ApiSseEvent({
-    required this.id,
-    required this.name,
-    required this.data,
-  });
+  ApiSseEvent({required this.id, required this.name, required this.data});
 
   /// Event id.
   final String id;
@@ -47,7 +40,7 @@ class ApiSseClient {
 
   /// Callback invoked when connection state changes.
   final void Function(ApiSseConnectionState state, String? message)
-      onStateChanged;
+  onStateChanged;
 
   /// Delay used before reconnecting after a failure.
   final Duration retryDelay;
@@ -59,6 +52,16 @@ class ApiSseClient {
 
   /// Starts the SSE stream and reconnect loop.
   Future<void> connect() async {
+    if (ProfileService.isPreview && !ProfileService.permitsPreviewUri(url)) {
+      _disposed = true;
+      _generation++;
+      await _closeTransport();
+      onStateChanged(
+        ApiSseConnectionState.error,
+        'Preview requests are restricted to the local fixture.',
+      );
+      return;
+    }
     _disposed = false;
     _generation++;
     await _open(_generation, initial: true);
@@ -137,35 +140,37 @@ class ApiSseClient {
     var currentId = '';
     var currentEvent = '';
     var dataBuffer = StringBuffer();
-    _lineSubscription =
-        response.transform(utf8.decoder).transform(const LineSplitter()).listen(
-              (line) {
-                if (!_isActive(generation)) {
-                  return;
-                }
-                if (line.isEmpty) {
-                  _emitEvent(currentId, currentEvent, dataBuffer);
-                  currentId = '';
-                  currentEvent = '';
-                  dataBuffer = StringBuffer();
-                  return;
-                }
-                if (line.startsWith(':')) {
-                  return;
-                }
-                _consumeLine(
-                  line,
-                  onId: (value) => currentId = value,
-                  onEvent: (value) => currentEvent = value,
-                  onData: (value) => dataBuffer.writeln(value),
-                );
-              },
-              onDone: () => _handleFailure(generation, 'stream_closed'),
-              onError: (Object error, StackTrace stackTrace) {
-                _handleFailure(generation, error.toString());
-              },
-              cancelOnError: true,
+    _lineSubscription = response
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .listen(
+          (line) {
+            if (!_isActive(generation)) {
+              return;
+            }
+            if (line.isEmpty) {
+              _emitEvent(currentId, currentEvent, dataBuffer);
+              currentId = '';
+              currentEvent = '';
+              dataBuffer = StringBuffer();
+              return;
+            }
+            if (line.startsWith(':')) {
+              return;
+            }
+            _consumeLine(
+              line,
+              onId: (value) => currentId = value,
+              onEvent: (value) => currentEvent = value,
+              onData: (value) => dataBuffer.writeln(value),
             );
+          },
+          onDone: () => _handleFailure(generation, 'stream_closed'),
+          onError: (Object error, StackTrace stackTrace) {
+            _handleFailure(generation, error.toString());
+          },
+          cancelOnError: true,
+        );
   }
 
   void _consumeLine(

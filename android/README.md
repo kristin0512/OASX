@@ -1,4 +1,4 @@
-PS C:\Users\萌萌哒\Desktop\key> keytool -genkey -v -keystore .\upload-keystore.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+PS <PROJECT_ROOT> keytool -genkey -v -keystore .\upload-keystore.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
 输入密钥库口令:
 再次输入新口令:
 它们不匹配。请重试
@@ -27,7 +27,7 @@ CN=Huangrunheng, OU=OASX, O=OASX, L=OASX, ST=OASX, C=OASX是否正确?
 
 Warning:
 JKS 密钥库使用专用格式。建议使用 "keytool -importkeystore -srckeystore .\upload-keystore.jks -destkeystore .\upload-keystore.jks -deststoretype pkcs12" 迁移到行业标准格式 PKCS12。
-PS C:\Users\萌萌哒\Desktop\key>
+PS <PROJECT_ROOT>
 
 
 

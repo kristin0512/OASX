@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:get_storage/get_storage.dart';
+import 'package:oasx/service/profile_service.dart';
 import 'package:oasx/config/theme.dart' show darkTheme, lightTheme;
 import 'package:oasx/modules/settings/controllers/settings_controller.dart';
 import 'package:oasx/service/autostart_service.dart';
@@ -62,13 +62,13 @@ class OASXApp extends StatelessWidget {
 class GlobalBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
-        PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
-      };
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+  };
 }
 
 Future<void> initService() async {
-  await GetStorage.init();
+  await ProfileService.initialize();
 
   Get.put(SettingsController(), permanent: true);
   if (PlatformUtils.isDesktop) {

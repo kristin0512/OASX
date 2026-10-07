@@ -66,6 +66,12 @@ class _ArgumentViewState extends State<ArgumentView> {
       _syncTextController();
       final title = _title();
       final form = _buildFormSection();
+      if (model.type == 'multi_enum') {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [title, const SizedBox(height: 8), form],
+        ).padding(bottom: 8);
+      }
       if (landscape) {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,6 +171,32 @@ class _ArgumentViewState extends State<ArgumentView> {
               )
               .toList(),
           onChanged: isLocked ? null : onEnumChanged,
+        ),
+      'multi_enum' => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: (model.enumEnum ?? const <String>[]).map((option) {
+                final selected = List<String>.from(model.value as List);
+                final checked = selected.contains(option);
+                return FilterChip(
+                  label: Text(option.tr),
+                  selected: checked,
+                  onSelected: isLocked || (checked && selected.length == 1)
+                      ? null
+                      : (enabled) {
+                          final next = List<String>.from(selected);
+                          if (enabled) { next.add(option); } else { next.remove(option); }
+                          _applyValue(next, 'multi_enum', useSetState: true);
+                        },
+                );
+              }).toList(),
+            ),
+            if (errorText != null)
+              Text(errorText, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
         ),
       'date_time' => _buildPicker(
           DateTimePicker(value: model.value, onChange: onDateTimeChanged),

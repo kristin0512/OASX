@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:oasx/modules/home/controllers/error_records_controller.dart';
+import 'package:oasx/modules/home/widgets/error_records_panel.dart';
 import 'package:oasx/modules/log/script_log_controller.dart';
 import 'package:oasx/translation/i18n_content.dart';
 
@@ -8,9 +10,11 @@ class LogCenterPanel extends StatefulWidget {
   const LogCenterPanel({
     super.key,
     required this.scriptName,
+    this.errorRecordsController,
   });
 
   final String scriptName;
+  final ErrorRecordsController? errorRecordsController;
 
   @override
   State<LogCenterPanel> createState() => _LogCenterPanelState();
@@ -85,6 +89,8 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
   ScriptLogController? _logController;
   ScrollController? _scrollController;
   String _level = 'ALL';
+  bool _showErrors = false;
+  bool _errorsOpened = false;
 
   /// Cache of parsed log entries for incremental rendering.
   final List<_CachedLogEntry> _cachedEntries = <_CachedLogEntry>[];
@@ -92,6 +98,8 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
   @override
   void initState() {
     super.initState();
+    _showErrors = widget.scriptName.trim().isEmpty;
+    _errorsOpened = _showErrors;
     _bindLogController(widget.scriptName);
   }
 
@@ -104,6 +112,10 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
     _saveScrollOffset();
     _logController?.scrollLogs = null;
     _bindLogController(widget.scriptName);
+    if (widget.scriptName.trim().isEmpty) {
+      _showErrors = true;
+      _errorsOpened = true;
+    }
   }
 
   @override
@@ -139,21 +151,62 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.scriptName.trim().isEmpty) {
-      return Card(child: Center(child: Text(I18n.homeNoScriptSelected.tr)));
-    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: IndexedStack(
+          index: _showErrors ? 1 : 0,
           children: [
-            _buildToolbar(context),
-            const SizedBox(height: 12),
-            Expanded(child: _buildLogView(context)),
+            if (widget.scriptName.trim().isEmpty)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildLogTabs(),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: Center(child: Text(I18n.homeNoScriptSelected.tr)),
+                  ),
+                ],
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildToolbar(context),
+                  const SizedBox(height: 12),
+                  Expanded(child: _buildLogView(context)),
+                ],
+              ),
+            if (_errorsOpened)
+              ErrorRecordsPanel(
+                key: ValueKey('error-records-${widget.scriptName}'),
+                scriptName: widget.scriptName,
+                active: _showErrors,
+                header: _buildLogTabs(),
+                controller: widget.errorRecordsController,
+              )
+            else
+              const SizedBox.shrink(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLogTabs() {
+    return ToggleButtons(
+      borderRadius: BorderRadius.circular(18),
+      constraints: const BoxConstraints(minWidth: 52, minHeight: 30),
+      textStyle: const TextStyle(fontSize: 12),
+      isSelected: [!_showErrors, _showErrors],
+      onPressed: (index) {
+        _saveScrollOffset();
+        setState(() {
+          _showErrors = index == 1;
+          _errorsOpened = _errorsOpened || _showErrors;
+        });
+      },
+      children: const [Text('信息'), Text('错误')],
     );
   }
 
@@ -163,9 +216,16 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
       children: [
         Row(
           children: [
-            Text(I18n.log.tr, style: Theme.of(context).textTheme.titleMedium),
+            _buildLogTabs(),
             const Spacer(),
             PopupMenuButton<String>(
+              constraints: const BoxConstraints(minWidth: 112),
+              padding: const EdgeInsets.all(6),
+              style: IconButton.styleFrom(
+                minimumSize: const Size(36, 36),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
               tooltip: _level,
               initialValue: _level,
               onSelected: (value) => setState(() {
@@ -177,7 +237,9 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
                 PopupMenuItem<String>(value: 'WARNING', child: Text('WARNING')),
                 PopupMenuItem<String>(value: 'ERROR', child: Text('ERROR')),
                 PopupMenuItem<String>(
-                    value: 'CRITICAL', child: Text('CRITICAL')),
+                  value: 'CRITICAL',
+                  child: Text('CRITICAL'),
+                ),
               ],
               icon: Icon(
                 Icons.filter_list_rounded,
@@ -190,6 +252,12 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
               final controller = _logController;
               final isEnabled = controller?.autoScroll.value ?? false;
               return IconButton(
+                constraints: const BoxConstraints.tightFor(
+                  width: 36,
+                  height: 36,
+                ),
+                padding: const EdgeInsets.all(6),
+                visualDensity: VisualDensity.compact,
                 tooltip: I18n.homeLogAutoScroll.tr,
                 onPressed: controller == null
                     ? null
@@ -200,11 +268,17 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
               );
             }),
             IconButton(
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+              padding: const EdgeInsets.all(6),
+              visualDensity: VisualDensity.compact,
               tooltip: I18n.copy.tr,
               onPressed: _copyVisibleLogs,
               icon: const Icon(Icons.content_copy_rounded),
             ),
             IconButton(
+              constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+              padding: const EdgeInsets.all(6),
+              visualDensity: VisualDensity.compact,
               tooltip: I18n.clearLog.tr,
               onPressed: _clearLogs,
               icon: const Icon(Icons.delete_outlined),
@@ -216,6 +290,9 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
   }
 
   Widget _buildLogView(BuildContext context) {
+    if (widget.scriptName.trim().isEmpty) {
+      return Center(child: Text(I18n.homeNoScriptSelected.tr));
+    }
     return Obx(() {
       final controller = _logController;
       final scrollController = _scrollController;
@@ -332,9 +409,7 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
       final levelMatch = _logLevelPattern.firstMatch(raw);
       return _ParsedEntry(level: levelMatch?.group(2) ?? '');
     }
-    return _ParsedEntry(
-      level: (match.group(3) ?? '').trim(),
-    );
+    return _ParsedEntry(level: (match.group(3) ?? '').trim());
   }
 
   List<InlineSpan> _buildHighlightedLine(String raw) {
@@ -361,10 +436,12 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
         cursor = nextCursor;
         continue;
       }
-      spans.add(TextSpan(
-        text: raw.substring(match.start, match.end),
-        style: match.style,
-      ));
+      spans.add(
+        TextSpan(
+          text: raw.substring(match.start, match.end),
+          style: match.style,
+        ),
+      );
       cursor = match.end;
     }
     return spans;
@@ -434,8 +511,9 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
     }
     final sourceLogs = _sourceLogs(controller);
     _syncCache(sourceLogs);
-    final visibleLogs =
-        _filterEntries(_cachedEntries).map(_resolveNormalized).join('\n');
+    final visibleLogs = _filterEntries(
+      _cachedEntries,
+    ).map(_resolveNormalized).join('\n');
     Clipboard.setData(ClipboardData(text: visibleLogs));
     Get.snackbar(
       I18n.tip.tr,
@@ -577,10 +655,7 @@ class _LogCenterPanelState extends State<LogCenterPanel> {
 }
 
 class _LogSelectableText extends StatelessWidget {
-  const _LogSelectableText({
-    required this.spans,
-    required this.style,
-  });
+  const _LogSelectableText({required this.spans, required this.style});
 
   final List<InlineSpan> spans;
   final TextStyle style;
@@ -591,19 +666,16 @@ class _LogSelectableText extends StatelessWidget {
       text: TextSpan(style: style, children: spans),
       softWrap: true,
       selectionRegistrar: SelectionContainer.maybeOf(context),
-      selectionColor: Theme.of(context)
-          .colorScheme
-          .secondaryContainer
-          .withValues(alpha: 0.35),
+      selectionColor: Theme.of(
+        context,
+      ).colorScheme.secondaryContainer.withValues(alpha: 0.35),
     );
   }
 }
 
 /// Cached log entry with prebuilt highlight spans.
 class _CachedLogEntry {
-  _CachedLogEntry({
-    required this.raw,
-  });
+  _CachedLogEntry({required this.raw});
 
   /// Raw log line as received.
   final String raw;
@@ -619,18 +691,13 @@ class _CachedLogEntry {
 }
 
 class _ParsedEntry {
-  const _ParsedEntry({
-    this.level = '',
-  });
+  const _ParsedEntry({this.level = ''});
 
   final String level;
 }
 
 class _LogHighlightPattern {
-  const _LogHighlightPattern({
-    required this.expression,
-    required this.style,
-  });
+  const _LogHighlightPattern({required this.expression, required this.style});
 
   final RegExp expression;
   final TextStyle style;

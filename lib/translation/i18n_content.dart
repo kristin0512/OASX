@@ -1,4 +1,20 @@
 class I18n {
+  static const configJsonImport = 'config_json_import';
+  static const configJsonImportHelp = 'config_json_import_help';
+  static const configJsonImportAction = 'config_json_import_action';
+  static const configJsonBackup = 'config_json_backup';
+  static const configJsonBackupHelp = 'config_json_backup_help';
+  static const configJsonShare = 'config_json_share';
+  static const configJsonShareHelp = 'config_json_share_help';
+  static const configJsonChoose = 'config_json_choose';
+  static const configJsonSave = 'config_json_save';
+  static const configJsonSaved = 'config_json_saved';
+  static const configJsonSavedValues = 'config_json_saved_values';
+  static const configJsonImported = 'config_json_imported';
+  static const configJsonUnsaved = 'config_json_unsaved';
+  static const taskJsonMenu = 'task_json_menu';
+  static const taskJsonImport = 'task_json_import';
+  static const taskJsonImportHelp = 'task_json_import_help';
   static const String logOut = 'Log out', zhCn = 'zh-CN', enUs = 'en-US';
   static const String changeTheme = 'Change Theme',
       changeLanguage = 'Change Language',
@@ -84,6 +100,13 @@ class I18n {
   static const String minimizeToSystemTray = 'Minimize to system tray',
       minimizeToSystemTrayHelp = 'Minimize to system tray help',
       launchAtStartup = 'Launch at startup';
+  static const String stopBackendOnExit = 'Stop OAS service on exit',
+      stopBackendOnExitHelp = 'Stop OAS service on exit help',
+      exitBackendStopFailed = 'OAS service shutdown could not be confirmed',
+      exitBackendStopFailedHelp =
+          'OAS service shutdown could not be confirmed help',
+      exitKeepOpen = 'Keep OASX open',
+      exitFrontendOnly = 'Exit OASX only';
   static const String launchAtStartupHelp = 'Launch at startup help',
       launchAtStartupUpdateFailed = 'Launch at startup update failed',
       updateProxyUrl = 'update_proxy_url',

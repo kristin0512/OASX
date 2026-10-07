@@ -2,45 +2,46 @@ part of 'script_service.dart';
 
 extension ScriptServiceWsX on ScriptService {
   Future<void> connectScript(String name) async {
+    if (_detached) return;
+    final generation = _backendGeneration;
     if (!scriptModelMap.containsKey(name)) {
       addScriptModel(name);
     }
     if (!Get.isRegistered<ScriptLogController>(tag: name)) {
-      Get.put(
-        ScriptLogController(name: name),
-        tag: name,
-        permanent: true,
-      );
+      Get.put(ScriptLogController(name: name), tag: name, permanent: true);
     }
     wsService.removeAllListeners(name);
     final client = await wsService.connect(
       name: name,
       listener: (mg) => wsListener(mg, name),
     );
-    client.status.listen(
-      (wsStatus) => scriptModelMap[name]?.update(state: wsStatus.scriptState),
-    );
+    if (_detached || generation != _backendGeneration) return;
+    client.status.listen((wsStatus) {
+      if (!_detached && generation == _backendGeneration) {
+        scriptModelMap[name]?.update(state: wsStatus.scriptState);
+      }
+    });
   }
 
   Future<void> startScript(String name) async {
+    if (_detached) return;
+    final generation = _backendGeneration;
     if (!scriptModelMap.containsKey(name)) return;
     if (isRunning(name)) return;
     await connectScript(name);
+    if (_detached || generation != _backendGeneration) return;
     await wsService.send(name, 'start');
   }
 
   void wsListener(dynamic message, String name) {
+    if (_detached || !scriptModelMap.containsKey(name)) return;
     if (message is! String) {
       printError(info: 'Websocket push data is not of type string and map');
       return;
     }
     if (!message.startsWith('{') || !message.endsWith('}')) {
       if (!Get.isRegistered<ScriptLogController>(tag: name)) {
-        Get.put(
-          ScriptLogController(name: name),
-          tag: name,
-          permanent: true,
-        );
+        Get.put(ScriptLogController(name: name), tag: name, permanent: true);
       }
       Get.find<ScriptLogController>(tag: name).addLog(message);
       return;
@@ -74,6 +75,7 @@ extension ScriptServiceWsX on ScriptService {
   }
 
   Future<void> stopScript(String name) async {
+    if (_detached) return;
     if (!scriptModelMap.containsKey(name)) return;
     await wsService.send(name, 'stop');
   }

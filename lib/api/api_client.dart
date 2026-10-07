@@ -1,6 +1,11 @@
+import 'dart:convert';
+
+import 'config_transfer_api.dart';
+import 'config_transfer_models.dart';
+
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:dio_cache_interceptor_file_store/dio_cache_interceptor_file_store.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter_nb_net/flutter_net.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
@@ -11,6 +16,7 @@ import 'package:oasx/modules/home/models/script_statistics_models.dart';
 import 'package:oasx/translation/i18n.dart';
 import 'package:oasx/translation/i18n_content.dart';
 import 'package:oasx/api/github_release_model.dart';
+import 'package:oasx/service/profile_service.dart';
 
 import './home_model.dart';
 import './update_info_model.dart';
@@ -20,6 +26,7 @@ part 'api_client_menu_config.dart';
 part 'api_client_script.dart';
 part 'api_client_feedback.dart';
 part 'api_client_statistics.dart';
+part 'api_client_config_transfer.dart';
 
 class ApiResult<T> {
   ApiResult({this.data, this.error, this.code});
@@ -30,9 +37,7 @@ class ApiResult<T> {
 
   bool get isSuccess => error == null || error!.isEmpty;
 
-  ApiResult.success(this.data)
-      : error = null,
-        code = null;
+  ApiResult.success(this.data) : error = null, code = null;
 
   ApiResult.failure(this.error, [this.code]) : data = null;
 
@@ -55,27 +60,38 @@ class ApiResult<T> {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'data': data,
-      'error': error,
-      'code': code,
-    };
+    return {'data': data, 'error': error, 'code': code};
   }
 }
 
 class ApiClient {
-  static const String _defaultAddress = 'http://127.0.0.1:22288';
+  static const String _defaultAddress = ProfileService.isPreview
+      ? 'http://127.0.0.1:22391'
+      : 'http://127.0.0.1:22289';
   static final ApiClient _instance = ApiClient._internal();
 
   factory ApiClient() => _instance;
 
   late final CacheOptions _cacheOptions;
+  final Future<ApiResult<dynamic>> Function(String path)?
+  _statisticsGetOverride;
+  bool? _statisticsSupported;
+  Future<bool>? _statisticsProbe;
 
-  ApiClient._internal() {
+  /// Null until the backend's OpenAPI document has been checked.
+  bool? get statisticsSupported => _statisticsSupported;
+
+  @visibleForTesting
+  ApiClient.forTesting({
+    required Future<ApiResult<dynamic>> Function(String path) statisticsGet,
+  }) : _statisticsGetOverride = statisticsGet;
+
+  ApiClient._internal() : _statisticsGetOverride = null {
     final temporaryDirectory =
         GetStorage().read(StorageKey.temporaryDirectory.name) ?? '';
-    final cacheStore =
-        kIsWeb ? MemCacheStore() : FileCacheStore(temporaryDirectory);
+    final cacheStore = kIsWeb
+        ? MemCacheStore()
+        : FileCacheStore(temporaryDirectory);
     _cacheOptions = CacheOptions(
       store: cacheStore,
       policy: CachePolicy.request,
@@ -89,11 +105,7 @@ class ApiClient {
     NetOptions.instance
         .setConnectTimeout(const Duration(seconds: 3))
         .enableLogger(false)
-        .addInterceptor(
-          DioCacheInterceptor(
-            options: _cacheOptions,
-          ),
-        )
+        .addInterceptor(DioCacheInterceptor(options: _cacheOptions))
         .addInterceptor(ApiInterceptor())
         .create();
     setAddress(_defaultAddress);
@@ -103,11 +115,30 @@ class ApiClient {
 
   bool get hasConfiguredBackendAddress => address.trim().isNotEmpty;
 
-  void setAddress(String address) {
+  static String resolveAddress(
+    String address, {
+    bool preview = ProfileService.isPreview,
+  }) {
+    if (preview) return 'http://127.0.0.1:22391';
     final normalized = address.trim();
+    if (normalized.isEmpty) return '';
+    return normalized.startsWith('http://') || normalized.startsWith('https://')
+        ? normalized
+        : 'http://$normalized';
+  }
+
+  void setAddress(String address) {
+    final normalized = resolveAddress(address);
+    if (this.address != normalized) {
+      _statisticsSupported = null;
+      _statisticsProbe = null;
+    }
     this.address = normalized;
-    NetOptions.instance.dio.options.baseUrl =
-        normalized.isEmpty ? _defaultAddress : normalized;
+    if (_statisticsGetOverride == null) {
+      NetOptions.instance.dio.options.baseUrl = normalized.isEmpty
+          ? _defaultAddress
+          : normalized;
+    }
   }
 
   void resetAddress() {
@@ -115,8 +146,7 @@ class ApiClient {
   }
 
   void clearAddress() {
-    address = '';
-    NetOptions.instance.dio.options.baseUrl = _defaultAddress;
+    setAddress('');
   }
 
   Future<ApiResult<T>> request<T>(
@@ -144,8 +174,10 @@ class ApiClient {
   }
 
   Future<bool> killServer() async {
-    final res =
-        await request(() => get('/home/kill_server'), onError: (msg, code) {});
+    final res = await request(
+      () => get('/home/kill_server'),
+      onError: (msg, code) {},
+    );
     return res.isSuccess && res.data == 'success';
   }
 
@@ -175,10 +207,7 @@ class ApiClient {
 
   Future<ApiResult<GithubReleaseModel>> getGithubReleaseResult() async {
     final res = await request<GithubReleaseModel>(
-      () => get(
-        updateUrlGithub,
-        decodeType: GithubReleaseModel(),
-      ),
+      () => get(updateUrlGithub, decodeType: GithubReleaseModel()),
     );
     return res;
   }
@@ -215,10 +244,7 @@ class ApiClient {
 
   Future<bool> putChineseTranslate() async {
     final res = await request(
-      () => put(
-        '/home/chinese_translate',
-        data: Messages().all_cn_translate,
-      ),
+      () => put('/home/chinese_translate', data: Messages().all_cn_translate),
     );
     return res.isSuccess && res.data == true;
   }
@@ -226,9 +252,16 @@ class ApiClient {
   Future<Map<String, Map<String, String>>> getAdditionalTranslate() async {
     final res = await request(() => get('/home/additional_translate'));
     final result = <String, Map<String, String>>{};
-    if (res.isSuccess) {
-      result['zh_CN'] = (res.data['zh-CN'] as Map).cast<String, String>();
-      result['en_US'] = (res.data['en-US'] as Map).cast<String, String>();
+    if (res.isSuccess && res.data is Map) {
+      for (final language in ['zh-CN', 'en-US']) {
+        final entries =
+            res.data[language] ?? res.data[language.replaceAll('-', '_')];
+        if (entries is Map) {
+          result[language.replaceAll('-', '_')] = entries.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          );
+        }
+      }
     }
     return result;
   }

@@ -1,0 +1,167 @@
+{
+  "source": "Read-only ConfigModel.script_task export and assets/i18n/zh-CN.json, 2026-10-06; no account file or live API",
+  "args": {
+    "Dokan": {
+      "dokan_config": [
+        {
+          "name": "dokan_run_time",
+          "title": "Dokan Run Time",
+          "description": "dokan_run_time_help",
+          "default": "19:00:00",
+          "value": "19:15:00",
+          "type": "time"
+        },
+        {
+          "name": "opening_wait_minutes",
+          "title": "Opening Wait Minutes",
+          "description": "opening_wait_minutes_help",
+          "default": 60,
+          "value": 60,
+          "type": "integer"
+        },
+        {
+          "name": "opening_retry_interval",
+          "title": "Opening Retry Interval",
+          "description": "opening_retry_interval_help",
+          "default": "PT3M",
+          "value": "00 00:05:00",
+          "type": "time_delta"
+        }
+      ]
+    },
+    "GuildBanquet": {
+      "guild_banquet_time": [
+        {
+          "name": "opening_wait_minutes",
+          "title": "Opening Wait Minutes",
+          "description": "opening_wait_minutes_help",
+          "default": 60,
+          "value": 60,
+          "type": "integer"
+        },
+        {
+          "name": "opening_retry_interval",
+          "title": "Opening Retry Interval",
+          "description": "opening_retry_interval_help",
+          "default": "PT3M",
+          "value": "00 00:05:00",
+          "type": "time_delta"
+        },
+        {
+          "name": "day_1",
+          "title": "day_1",
+          "description": "每周第1次运行时间设置，注意第一次时间要比第二次时间早",
+          "default": "星期三",
+          "value": "星期三",
+          "type": "enum",
+          "enumEnum": [
+            "星期一",
+            "星期二",
+            "星期三",
+            "星期四",
+            "星期五",
+            "星期六",
+            "星期日"
+          ]
+        },
+        {
+          "name": "run_time_1",
+          "title": "Run Time 1",
+          "default": "19:00:00",
+          "value": "19:00:00",
+          "type": "time"
+        },
+        {
+          "name": "day_2",
+          "title": "day_2",
+          "description": "每周第2次运行时间设置",
+          "default": "星期六",
+          "value": "星期六",
+          "type": "enum",
+          "enumEnum": [
+            "星期一",
+            "星期二",
+            "星期三",
+            "星期四",
+            "星期五",
+            "星期六",
+            "星期日"
+          ]
+        },
+        {
+          "name": "run_time_2",
+          "title": "Run Time 2",
+          "description": "每周第2次运行时间设置",
+          "default": "19:00:00",
+          "value": "19:00:00",
+          "type": "time"
+        }
+      ]
+    },
+    "DemonRetreat": {
+      "demon_retreat_time": [
+        {
+          "name": "opening_wait_minutes",
+          "title": "Opening Wait Minutes",
+          "description": "opening_wait_minutes_help",
+          "default": 60,
+          "value": 60,
+          "type": "integer"
+        },
+        {
+          "name": "opening_retry_interval",
+          "title": "Opening Retry Interval",
+          "description": "opening_retry_interval_help",
+          "default": "PT3M",
+          "value": "00 00:05:00",
+          "type": "time_delta"
+        },
+        {
+          "name": "custom_run_time",
+          "title": "Custom Run Time",
+          "description": "demon_retreat_opening_time_help",
+          "default": "10:00:00",
+          "value": "10:00:00",
+          "type": "time"
+        }
+      ]
+    },
+    "CollectiveMissions": {
+      "missions_config": [
+        {
+          "name": "monday_to_thursday",
+          "title": "Monday To Thursday",
+          "description": "collective_monday_to_thursday_help",
+          "default": false,
+          "value": false,
+          "type": "boolean"
+        },
+        {
+          "name": "run_after_dokan",
+          "title": "Run After Dokan",
+          "description": "run_after_dokan_help",
+          "default": false,
+          "value": false,
+          "type": "boolean"
+        }
+      ]
+    }
+  },
+  "additional_translations": {
+    "collective_monday_to_thursday_help": "集体任务只在周一至周四运行，周五至周日跳过。与道馆联动开启时也会遵守此限制。",
+    "custom_run_time": "自定义运行时间",
+    "demon_retreat_opening_time_help": "周六首领退治的开场时间；从这里开始按等待窗口和重查间隔检测。",
+    "demon_retreat_time": "首领退治开场与等待设置",
+    "dokan_run_time": "道馆开场时间",
+    "dokan_run_time_help": "从这个时间开始检查道馆。尚未开启时按下方间隔重查，直到等待窗口结束。",
+    "guild_banquet_time": "寮宴开场与等待设置",
+    "opening_retry_interval": "未开场重查间隔",
+    "opening_retry_interval_help": "尚未开启或未确认完成时，间隔多久再次检查。建议3—5分钟；必须大于0且不足1天。格式：天 时:分:秒，例如00 00:03:00。",
+    "opening_wait_minutes": "开场等待窗口（分钟）",
+    "opening_wait_minutes_help": "从设定开场时间开始等待，默认60分钟，可设置1—1440分钟。窗口内未开场则稍后再查；已进入的活动继续完成。",
+    "run_after_dokan": "道馆结束后自动运行",
+    "run_after_dokan_help": "开启后忽略普通定时安排，等待当天道馆确认结束再执行集体任务。道馆未开、次数未知或第一场后仍有第二场时不触发；同一天不重复提交。",
+    "run_time_1": "第1次开场时间",
+    "run_time_2": "第2次开场时间"
+  }
+}

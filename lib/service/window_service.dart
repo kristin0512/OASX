@@ -4,9 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import 'package:get_storage/get_storage.dart';
+import 'package:oasx/api/api_client.dart';
+import 'package:oasx/api/backend_exit_client.dart';
+import 'package:oasx/service/app_exit_service.dart';
+import 'package:oasx/service/profile_service.dart';
 import 'package:oasx/modules/common/models/storage_key.dart';
 import 'package:oasx/modules/common/models/window_state.dart';
 import 'package:oasx/service/system_tray_service.dart';
+import 'package:oasx/translation/i18n_content.dart';
 import 'package:oasx/utils/platform_utils.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -26,6 +31,21 @@ class WindowService extends GetxService with WindowListener {
   DateTime? _lastSaveTime;
   final enableWindowState = false.obs;
   final enableSystemTray = false.obs;
+  final stopBackendOnExit = false.obs;
+
+  late final AppExitService _exitService = AppExitService(
+    minimizeToTray: () => enableSystemTray.value,
+    trayAvailable: () =>
+        Get.isRegistered<SystemTrayService>() &&
+        Get.find<SystemTrayService>().isTrayVisible,
+    stopBackendOnExit: () => stopBackendOnExit.value,
+    backendAddress: () => ApiClient().address,
+    hideWindow: _hideToTray,
+    closeFrontend: _closeFrontend,
+    stopBackend: (address) => BackendExitClient().stop(address),
+    resolveStopFailure: _resolveStopFailure,
+    preview: ProfileService.isPreview,
+  );
 
   @override
   Future<void> onInit() async {
@@ -51,11 +71,17 @@ class WindowService extends GetxService with WindowListener {
         _storage.read(StorageKey.enableWindowState.name) ?? false;
     enableSystemTray.value =
         _storage.read(StorageKey.enableSystemTray.name) ?? false;
+    stopBackendOnExit.value =
+        _storage.read(StorageKey.stopBackendOnExit.name) ?? false;
+
+    // WM_CLOSE must already be intercepted when the window becomes visible.
+    // Tray readiness only changes hide-vs-exit, never close interception.
+    windowManager.addListener(this);
+    await windowManager.setPreventClose(true);
 
     final lastState = await initWindowState();
 
     await windowManager.waitUntilReadyToShow(buildWindowOptions(lastState));
-    windowManager.addListener(this);
 
     _kickoffSystemTrayInit();
   }
@@ -63,13 +89,7 @@ class WindowService extends GetxService with WindowListener {
   void _kickoffSystemTrayInit() {
     if (!PlatformUtils.isDesktop) return;
 
-    if (!enableSystemTray.value) {
-      unawaited(windowManager.setPreventClose(false));
-      return;
-    }
-
-    // 托盘启用时，先保证可关闭；待托盘创建成功后再拦截关闭事件，避免开机登录时托盘未就绪导致“无法退出”。
-    unawaited(windowManager.setPreventClose(false));
+    if (!enableSystemTray.value) return;
 
     final token = ++_trayInitToken;
     unawaited(_ensureSystemTrayReady(token));
@@ -86,15 +106,20 @@ class WindowService extends GetxService with WindowListener {
       if (!Get.isRegistered<SystemTrayService>()) return;
 
       final ok = await Get.find<SystemTrayService>().showTray();
+      if (token != _trayInitToken || !enableSystemTray.value) {
+        if (!enableSystemTray.value) {
+          await Get.find<SystemTrayService>().hideTray();
+        }
+        return;
+      }
       if (ok) {
-        await windowManager.setPreventClose(true);
         return;
       }
 
       await Future.delayed(retryDelay);
     }
 
-    printInfo(info: 'system tray init failed, allow window close.');
+    printInfo(info: 'system tray init failed, close will exit the app.');
   }
 
   WindowOptions buildWindowOptions(WindowStateModel? lastState) {
@@ -106,6 +131,9 @@ class WindowService extends GetxService with WindowListener {
       minimumSize: minimumSize,
     );
     return WindowOptions(
+      title: ProfileService.isPreview
+          ? 'OASX AzurTian Preview - 22391'
+          : 'OASX AzurTian Runhey - 22289',
       size: initialSize,
       center: lastState == null,
       minimumSize: minimumSize,
@@ -186,18 +214,73 @@ class WindowService extends GetxService with WindowListener {
   void onWindowResize() => _scheduleSave();
 
   @override
-  void onWindowClose() async {
+  void onWindowClose() {
+    unawaited(
+      requestExit().catchError((Object error) {
+        printError(info: 'window exit failed: $error');
+        return AppExitResult.keptOpen;
+      }),
+    );
+  }
+
+  Future<AppExitResult> requestExit({bool fromTray = false}) =>
+      _exitService.requestExit(fromTray: fromTray);
+
+  Future<void> _hideToTray() async {
     _debounceTimer?.cancel();
-    final preventClose = await windowManager.isPreventClose();
-    if (!preventClose) return;
     await _saveWindowState();
-    // 检查是否已经设置了最小化到托盘的选项
-    if (enableSystemTray.value) {
-      await windowManager.hide();
-      return;
+    await windowManager.hide();
+  }
+
+  Future<void> _closeFrontend() async {
+    _debounceTimer?.cancel();
+    try {
+      await _saveWindowState();
+      await _storage.save();
+      if (Get.isRegistered<SystemTrayService>()) {
+        await Get.find<SystemTrayService>().hideTray();
+      }
+    } catch (error) {
+      printError(info: 'window exit cleanup failed: $error');
     }
     await windowManager.setPreventClose(false);
     await windowManager.close();
+  }
+
+  Future<ExitFailureChoice> _resolveStopFailure(
+    String address,
+    Object error,
+  ) async {
+    // A tray-menu exit may start with a hidden window. Always expose its
+    // failure choice instead of leaving an invisible modal behind the tray.
+    await windowManager.show();
+    await windowManager.focus();
+    if (Get.overlayContext == null) return ExitFailureChoice.keepOpen;
+    final uri = Uri.tryParse(address);
+    final displayAddress = uri == null
+        ? address
+        : uri.replace(userInfo: '', query: '', fragment: '').toString();
+    final result = await Get.dialog<ExitFailureChoice>(
+      AlertDialog(
+        title: Text(I18n.exitBackendStopFailed.tr),
+        content: Text(
+          I18n.exitBackendStopFailedHelp.trParams({'address': displayAddress}),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: ExitFailureChoice.keepOpen),
+            child: Text(I18n.exitKeepOpen.tr),
+          ),
+          TextButton(
+            onPressed: () =>
+                Get.back(result: ExitFailureChoice.exitFrontendOnly),
+            child: Text(I18n.exitFrontendOnly.tr),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+    return result ?? ExitFailureChoice.keepOpen;
   }
 
   @override
@@ -214,6 +297,11 @@ class WindowService extends GetxService with WindowListener {
     _storage.write(StorageKey.enableWindowState.name, newVal);
   }
 
+  void updateStopBackendOnExit(bool newVal) {
+    stopBackendOnExit.value = newVal;
+    _storage.write(StorageKey.stopBackendOnExit.name, newVal);
+  }
+
   Future<void> updateSystemTrayEnable(bool newVal) async {
     enableSystemTray.value = newVal;
     _storage.write(StorageKey.enableSystemTray.name, newVal);
@@ -226,7 +314,6 @@ class WindowService extends GetxService with WindowListener {
     }
 
     _trayInitToken++;
-    await windowManager.setPreventClose(false);
     if (!Get.isRegistered<SystemTrayService>()) {
       return;
     }

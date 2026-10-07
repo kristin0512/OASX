@@ -2,6 +2,22 @@
 part of i18n;
 
 final Map<String, String> _cn_ui = {
+  I18n.configJsonImport: '从 JSON 导入新配置',
+  I18n.configJsonImportHelp: '只会创建新配置，不覆盖已有配置。导入后任务默认停用，请核对账号、设备和任务设置再手动启用。最大 2 MiB。',
+  I18n.configJsonImportAction: '导入',
+  I18n.configJsonBackup: '完整备份 JSON',
+  I18n.configJsonBackupHelp: '保存全部原始设置，供自己恢复。文件包含账号、设备和推送等私密设置，请妥善保存。',
+  I18n.configJsonShare: '脱敏分享 JSON',
+  I18n.configJsonShareHelp: '将已知账号、设备和推送等敏感字段替换为占位符，保留任务设置。分享前仍请检查自定义内容。导入时敏感占位符不会覆盖本地值。',
+  I18n.configJsonChoose: '选择 JSON 文件（最大 2 MiB）',
+  I18n.configJsonSave: '选择位置并保存',
+  I18n.configJsonSaved: '已保存 JSON',
+  I18n.configJsonSavedValues: '导出后端已保存的设置，不包含尚未保存的参数修改。',
+  I18n.configJsonImported: '已导入，请核对设置后再手动启用任务。',
+  I18n.configJsonUnsaved: '请先保存或取消当前未保存的参数修改，再导入 JSON。',
+  I18n.taskJsonMenu: '任务 JSON 备份与导入',
+  I18n.taskJsonImport: '导入任务 JSON',
+  I18n.taskJsonImportHelp: '仅更新当前配置的这一项任务，不联动其他配置。目标配置必须停止；保留目标任务的启用状态。最大 2 MiB。',
   I18n.logOut: '退出登录',
   I18n.zhCn: '简体中文',
   I18n.enUs: 'English',
@@ -112,6 +128,14 @@ final Map<String, String> _cn_ui = {
   I18n.rememberWindowPositionSize: '记住窗口位置和大小',
   I18n.minimizeToSystemTray: '是否最小化到系统托盘',
   I18n.minimizeToSystemTrayHelp: '关闭窗口时最小化到系统托盘',
+  I18n.stopBackendOnExit: '退出程序时结束 OAS 服务',
+  I18n.stopBackendOnExitHelp:
+      '开启后，真正退出 OASX 时会结束当前连接的 OAS 服务及其任务；最小化到系统托盘不会触发。关闭此选项后，退出 OASX 时后端继续运行。',
+  I18n.exitBackendStopFailed: '未能确认 OAS 服务已结束',
+  I18n.exitBackendStopFailedHelp:
+      '无法确认 @address 的 OAS 服务是否已结束。你可以保留前端重试，或仅退出前端，后端可能仍在运行。',
+  I18n.exitKeepOpen: '保留前端',
+  I18n.exitFrontendOnly: '仅退出前端',
   I18n.launchAtStartup: '开机自启',
   I18n.launchAtStartupHelp: '开机登录后自动启动 OASX',
   I18n.launchAtStartupUpdateFailed: '开机自启设置失败，请稍后重试',

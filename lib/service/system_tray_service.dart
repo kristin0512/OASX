@@ -2,6 +2,7 @@ import 'dart:io' show Platform;
 import 'package:get/get.dart';
 import 'package:oasx/modules/home/models/config_model.dart';
 import 'package:oasx/service/script_service.dart';
+import 'package:oasx/service/window_service.dart';
 import 'package:oasx/translation/i18n_content.dart';
 import 'package:oasx/utils/platform_utils.dart';
 import 'package:system_tray/system_tray.dart';
@@ -12,11 +13,29 @@ class SystemTrayService extends GetxService {
   final AppWindow _appWindow = AppWindow();
 
   bool _isTrayVisible = false;
+  bool get isTrayVisible => _isTrayVisible;
+  Future<bool>? _initializing;
+  Future<void>? _destroying;
 
   Future<bool> showTray() async {
     if (!PlatformUtils.isDesktop) return false;
+    // Toggling off and immediately on must not report a soon-to-be-destroyed
+    // icon as available. Finish destruction before creating its replacement.
+    final destroying = _destroying;
+    if (destroying != null) await destroying;
     if (_isTrayVisible) return true;
+    final pending = _initializing;
+    if (pending != null) return pending;
+    final future = _showTray();
+    _initializing = future;
+    try {
+      return await future;
+    } finally {
+      _initializing = null;
+    }
+  }
 
+  Future<bool> _showTray() async {
     final iconPath = Platform.isWindows
         ? 'assets/images/Icon-app.ico'
         : 'assets/images/Icon-app.png';
@@ -51,9 +70,23 @@ class SystemTrayService extends GetxService {
   }
 
   Future<void> hideTray() async {
+    final pending = _destroying;
+    if (pending != null) return pending;
+    final future = _hideTray();
+    _destroying = future;
+    try {
+      await future;
+    } finally {
+      _destroying = null;
+    }
+  }
+
+  Future<void> _hideTray() async {
+    final initializing = _initializing;
+    if (initializing != null) await initializing;
     if (_isTrayVisible) {
-      await _systemTray.destroy();
       _isTrayVisible = false;
+      await _systemTray.destroy();
     }
   }
 
@@ -72,9 +105,7 @@ class SystemTrayService extends GetxService {
       MenuItemLabel(
         label: I18n.exit.tr,
         onClicked: (_) async {
-          await windowManager.setPreventClose(false);
-          await hideTray();
-          await windowManager.close();
+          await Get.find<WindowService>().requestExit(fromTray: true);
         },
       ),
     ]);
@@ -91,19 +122,21 @@ class SystemTrayService extends GetxService {
       return [MenuItemLabel(label: I18n.empty.tr)];
     }
     return scriptService.scriptModelMap.values
-        .map((e) => MenuItemCheckbox(
-              label: buildCheckBoxLabel(e),
-              checked: e.state.value == ScriptState.running,
-              onClicked: (menuItem) async {
-                if (menuItem.checked) {
-                  // 褰撳墠姝ｅ湪杩愯
-                  await Get.find<ScriptService>().stopScript(e.name);
-                } else {
-                  await Get.find<ScriptService>().startScript(e.name);
-                }
-                await menuItem.setCheck(!menuItem.checked);
-              },
-            ))
+        .map(
+          (e) => MenuItemCheckbox(
+            label: buildCheckBoxLabel(e),
+            checked: e.state.value == ScriptState.running,
+            onClicked: (menuItem) async {
+              if (menuItem.checked) {
+                // 褰撳墠姝ｅ湪杩愯
+                await Get.find<ScriptService>().stopScript(e.name);
+              } else {
+                await Get.find<ScriptService>().startScript(e.name);
+              }
+              await menuItem.setCheck(!menuItem.checked);
+            },
+          ),
+        )
         .toList();
   }
 

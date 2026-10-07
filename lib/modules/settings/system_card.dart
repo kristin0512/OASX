@@ -53,6 +53,19 @@ class SystemSettingsCard extends StatelessWidget {
           SettingItem(
             left: Row(
               children: [
+                Text(I18n.stopBackendOnExit.tr),
+                Tooltip(
+                  message: I18n.stopBackendOnExitHelp.tr,
+                  child: const Icon(Icons.help_outline, size: 16),
+                ).paddingOnly(left: 5),
+              ],
+            ),
+            right: const StopBackendOnExitSwitch(),
+          ),
+        if (PlatformUtils.isDesktop)
+          SettingItem(
+            left: Row(
+              children: [
                 Text(I18n.launchAtStartup.tr),
                 Tooltip(
                   message: I18n.launchAtStartupHelp.tr,
@@ -152,6 +165,19 @@ class SystemTraySwitch extends StatelessWidget {
     return Obx(() => Switch(
           value: windowService.enableSystemTray.value,
           onChanged: windowService.updateSystemTrayEnable,
+        ));
+  }
+}
+
+class StopBackendOnExitSwitch extends StatelessWidget {
+  const StopBackendOnExitSwitch({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final windowService = Get.find<WindowService>();
+    return Obx(() => Switch(
+          value: windowService.stopBackendOnExit.value,
+          onChanged: windowService.updateStopBackendOnExit,
         ));
   }
 }

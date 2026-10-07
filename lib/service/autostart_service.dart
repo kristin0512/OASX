@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
+import 'package:oasx/service/profile_service.dart';
 import 'package:oasx/modules/common/models/storage_key.dart';
 import 'package:oasx/translation/i18n_content.dart';
 import 'package:oasx/utils/platform_utils.dart';
@@ -19,13 +20,17 @@ class AutoStartService extends GetxService {
 
   @override
   Future<void> onInit() async {
+    if (ProfileService.isPreview) {
+      enableLaunchAtStartup.value = false;
+      super.onInit();
+      return;
+    }
     enableLaunchAtStartup.value =
         _storage.read(StorageKey.launchAtStartup.name) ?? false;
 
     final packageInfo = await _tryGetPackageInfo();
     _appName = _normalizeNonEmpty(packageInfo?.appName, fallback: 'OASX');
-    _packageName =
-        _normalizeNonEmpty(packageInfo?.packageName, fallback: 'oasx');
+    _packageName = 'oasx.azurtian.runhey';
 
     if (PlatformUtils.isDesktop) {
       await refresh();
@@ -34,14 +39,14 @@ class AutoStartService extends GetxService {
   }
 
   Future<void> refresh() async {
-    if (!PlatformUtils.isDesktop) return;
+    if (ProfileService.isPreview || !PlatformUtils.isDesktop) return;
     final enabled = await _isEnabledOnSystem();
     enableLaunchAtStartup.value = enabled;
     _storage.write(StorageKey.launchAtStartup.name, enabled);
   }
 
   Future<void> updateLaunchAtStartupEnable(bool enabled) async {
-    if (!PlatformUtils.isDesktop) return;
+    if (ProfileService.isPreview || !PlatformUtils.isDesktop) return;
     if (isApplying.value) return;
 
     isApplying.value = true;
@@ -81,8 +86,8 @@ class AutoStartService extends GetxService {
 
   Future<bool> _setWindowsEnabled(bool enabled) async {
     if (enabled) {
-      final xmlFile =
-          File('${Directory.systemTemp.path}\\${_windowsTaskName}_task.xml');
+      final temp = await ProfileService.temporaryDirectory();
+      final xmlFile = File('${temp.path}\\${_windowsTaskName}_task.xml');
       try {
         await xmlFile.writeAsString(_buildWindowsTaskXml());
         await _runWindowsElevated([
@@ -101,27 +106,23 @@ class AutoStartService extends GetxService {
       }
     }
 
-    await _runWindowsElevated([
-      '/Delete',
-      '/TN',
-      _windowsTaskName,
-      '/F',
-    ]);
+    await _runWindowsElevated(['/Delete', '/TN', _windowsTaskName, '/F']);
     return !(await _isWindowsEnabled());
   }
 
   Future<void> _runWindowsElevated(List<String> schtasksArgs) async {
-    final escaped =
-        schtasksArgs.map((a) => "'${a.replaceAll("'", "''")}'").join(',');
+    final escaped = schtasksArgs
+        .map((a) => "'${a.replaceAll("'", "''")}'")
+        .join(',');
     await Process.run('powershell', [
       '-NoProfile',
       '-Command',
-      'Start-Process -FilePath schtasks -ArgumentList $escaped -Verb RunAs -Wait',
+      'Start-Process -FilePath schtasks -ArgumentList $escaped -Verb RunAs -WindowStyle Hidden -Wait',
     ]);
   }
 
   String get _windowsTaskName {
-    return 'OASX';
+    return 'OASX-AzurTian-Runhey';
   }
 
   String _buildWindowsTaskXml() {
@@ -173,10 +174,7 @@ class AutoStartService extends GetxService {
     final file = File(_macLaunchAgentPath);
     if (enabled) {
       await file.parent.create(recursive: true);
-      await file.writeAsString(
-        _buildMacPlist(),
-        encoding: utf8,
-      );
+      await file.writeAsString(_buildMacPlist(), encoding: utf8);
       return true;
     }
 
@@ -234,10 +232,7 @@ class AutoStartService extends GetxService {
     final file = File(_linuxAutostartDesktopPath);
     if (enabled) {
       await file.parent.create(recursive: true);
-      await file.writeAsString(
-        _buildLinuxDesktopEntry(),
-        encoding: utf8,
-      );
+      await file.writeAsString(_buildLinuxDesktopEntry(), encoding: utf8);
       return true;
     }
 

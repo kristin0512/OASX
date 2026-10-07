@@ -4,6 +4,9 @@ import 'package:oasx/modules/args/index.dart';
 import 'package:oasx/modules/home/controllers/dashboard_controller.dart';
 import 'package:oasx/modules/home/models/config_model.dart';
 import 'package:oasx/translation/i18n_content.dart';
+import 'package:oasx/api/config_transfer_models.dart';
+import 'package:oasx/modules/common/widgets/config_transfer_dialog.dart';
+import 'package:oasx/service/script_service.dart';
 
 class TaskParameterPanel extends StatefulWidget {
   const TaskParameterPanel({
@@ -70,6 +73,28 @@ class _TaskParameterPanelState extends State<TaskParameterPanel> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              PopupMenuButton<String>(
+                tooltip: I18n.taskJsonMenu.tr,
+                onSelected: _onJsonAction,
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'backup',
+                    child: Text(I18n.configJsonBackup.tr),
+                  ),
+                  PopupMenuItem(
+                    value: 'share',
+                    child: Text(I18n.configJsonShare.tr),
+                  ),
+                  PopupMenuItem(
+                    value: 'import',
+                    enabled:
+                        widget.scriptModel.state.value ==
+                            ScriptState.inactive ||
+                        widget.scriptModel.state.value == ScriptState.warning,
+                    child: Text(I18n.taskJsonImport.tr),
+                  ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -95,10 +120,10 @@ class _TaskParameterPanelState extends State<TaskParameterPanel> {
                   activeDragPayload: dragPayload,
                   groupDragPayloadBuilder: canDragGroups
                       ? (groupName) => widget.controller.buildGroupDragPayload(
-                            sourceConfig: _scriptName,
-                            taskName: _taskName,
-                            groupName: groupName,
-                          )
+                          sourceConfig: _scriptName,
+                          taskName: _taskName,
+                          groupName: groupName,
+                        )
                       : null,
                   onGroupDragStarted: widget.controller.startConfigDrag,
                   onGroupDragEnded: widget.controller.clearConfigDrag,
@@ -112,6 +137,56 @@ class _TaskParameterPanelState extends State<TaskParameterPanel> {
         ],
       );
     });
+  }
+
+  Future<void> _onJsonAction(String action) async {
+    // Capture the target once; JSON transfer never expands to linked configs.
+    final config = _scriptName;
+    final task = _taskName;
+    if (config.isEmpty || task.isEmpty) return;
+    if (action != 'import') {
+      await ConfigTransferDialogs.exportJson(
+        context,
+        config,
+        action == 'backup' ? ConfigExportMode.backup : ConfigExportMode.share,
+        taskName: task,
+      );
+      return;
+    }
+    final result = await ConfigTransferDialogs.importJson(
+      context,
+      configName: config,
+      taskName: task,
+      guard: () {
+        if (Get.find<ArgsController>().hasDraftChanges) {
+          return I18n.configJsonUnsaved.tr;
+        }
+        final state = widget.scriptModel.state.value;
+        if (state != ScriptState.inactive && state != ScriptState.warning) {
+          return I18n.configUpdateTip.tr;
+        }
+        return null;
+      },
+    );
+    if (result == null || !mounted) return;
+    if (_scriptName == config && _taskName == task) {
+      setState(() {
+        _loadKey = '';
+        _ensureLoad();
+      });
+    }
+    // Only refresh observers; never start, stop or alter linked configurations.
+    final service = Get.find<ScriptService>();
+    await service.wsService.send(config, 'get_schedule');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            [I18n.configJsonImported.tr, ...result.warnings].join('\n'),
+          ),
+        ),
+      );
+    }
   }
 
   void _ensureLoad() {
@@ -140,14 +215,7 @@ class _TaskParameterPanelState extends State<TaskParameterPanel> {
       task: _taskName,
       stagingMode: true,
       scopeScripts: nextScope,
-      saveArgumentOverride: (
-        config,
-        task,
-        group,
-        argument,
-        type,
-        value,
-      ) {
+      saveArgumentOverride: (config, task, group, argument, type, value) {
         return widget.controller.applyLinkedSetArgument(
           config: config,
           task: task,

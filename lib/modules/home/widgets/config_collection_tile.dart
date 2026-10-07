@@ -4,6 +4,8 @@ import 'package:oasx/modules/home/controllers/dashboard_controller.dart';
 import 'package:oasx/modules/home/models/config_model.dart';
 import 'package:oasx/modules/home/widgets/config_collection_script_label.dart';
 import 'package:oasx/modules/home/widgets/config_collection_task_preview.dart';
+import 'package:oasx/modules/common/widgets/config_transfer_dialog.dart';
+import 'package:oasx/api/config_transfer_models.dart';
 import 'package:oasx/translation/i18n_content.dart';
 
 class ConfigCollectionTile extends StatelessWidget {
@@ -35,11 +37,12 @@ class ConfigCollectionTile extends StatelessWidget {
           final isActive = controller.activeScriptName.value == script.name;
           final showLinkCheckbox = controller.isLinkModeEnabled.value;
           final isLinked = controller.isScriptLinked(script.name);
-          final isDragCopyLoading =
-              controller.isDragCopyPendingFor(script.name);
+          final isDragCopyLoading = controller.isDragCopyPendingFor(
+            script.name,
+          );
           final compactThreshold =
               ConfigCollectionTile._compactLayoutThreshold +
-                  (showLinkCheckbox ? 64 : 0);
+              (showLinkCheckbox ? 64 : 0);
           final isCompact = constraints.maxWidth < compactThreshold;
           final rowColor = isActive
               ? theme.colorScheme.primaryContainer.withValues(alpha: 0.24)
@@ -88,6 +91,7 @@ class ConfigCollectionTile extends StatelessWidget {
                                 onTogglePower: onTogglePower,
                               ),
                               popupButton: _ActionMenuButton(
+                                configName: script.name,
                                 onRename: onRename,
                                 onDelete: onDelete,
                               ),
@@ -159,16 +163,10 @@ class _ScriptMeta extends StatelessWidget {
                     crossAxisAlignment: WrapCrossAlignment.center,
                     spacing: 4,
                     runSpacing: 2,
-                    children: [
-                      powerButton,
-                      popupButton,
-                    ],
+                    children: [powerButton, popupButton],
                   ),
                   const SizedBox(height: 4),
-                  ConfigCollectionScriptLabel(
-                    script: script,
-                    centered: true,
-                  ),
+                  ConfigCollectionScriptLabel(script: script, centered: true),
                 ],
               ),
             ),
@@ -190,10 +188,7 @@ class _ScriptMeta extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ConfigCollectionScriptLabel(
-                  script: script,
-                  centered: false,
-                ),
+                ConfigCollectionScriptLabel(script: script, centered: false),
                 const SizedBox(height: 6),
                 ConfigCollectionTaskPreview(script: script),
               ],
@@ -232,10 +227,7 @@ class _DragCopyLoadingMask extends StatelessWidget {
 }
 
 class _RegularAccentBar extends StatelessWidget {
-  const _RegularAccentBar({
-    super.key,
-    required this.color,
-  });
+  const _RegularAccentBar({super.key, required this.color});
 
   final Color color;
 
@@ -261,9 +253,7 @@ class _RegularAccentBar extends StatelessWidget {
 }
 
 class _PowerButton extends StatelessWidget {
-  const _PowerButton({
-    required this.onTogglePower,
-  });
+  const _PowerButton({required this.onTogglePower});
 
   final VoidCallback onTogglePower;
 
@@ -282,12 +272,14 @@ class _PowerButton extends StatelessWidget {
 
 class _ActionMenuButton extends StatelessWidget {
   const _ActionMenuButton({
+    required this.configName,
     required this.onRename,
     required this.onDelete,
   });
 
   final VoidCallback onRename;
   final VoidCallback onDelete;
+  final String configName;
 
   @override
   Widget build(BuildContext context) {
@@ -302,10 +294,22 @@ class _ActionMenuButton extends StatelessWidget {
             onRename();
             return;
           }
-          onDelete();
+          if (value == 'delete') {
+            onDelete();
+            return;
+          }
+          await ConfigTransferDialogs.exportJson(
+            context,
+            configName,
+            value == 'backup'
+                ? ConfigExportMode.backup
+                : ConfigExportMode.share,
+          );
         },
         itemBuilder: (context) => [
           PopupMenuItem(value: 'rename', child: Text(I18n.rename.tr)),
+          PopupMenuItem(value: 'backup', child: Text(I18n.configJsonBackup.tr)),
+          PopupMenuItem(value: 'share', child: Text(I18n.configJsonShare.tr)),
           PopupMenuItem(value: 'delete', child: Text(I18n.delete.tr)),
         ],
       ),

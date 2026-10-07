@@ -12,6 +12,22 @@ final Map<String, String> _us_base_map = {
 };
 
 final Map<String, String> _us_ui = {
+  I18n.configJsonImport: 'Import JSON as a new configuration',
+  I18n.configJsonImportHelp: 'Creates a new configuration without replacing existing ones. Imported tasks are disabled. Check account, device and task settings before enabling them. Maximum 2 MiB.',
+  I18n.configJsonImportAction: 'Import',
+  I18n.configJsonBackup: 'Full JSON backup',
+  I18n.configJsonBackupHelp: 'Saves original settings for your own recovery, including private account, device and notification settings. Keep this file private.',
+  I18n.configJsonShare: 'Redacted JSON for sharing',
+  I18n.configJsonShareHelp: 'Replaces known sensitive fields with placeholders and keeps task settings. Check custom content before sharing. Importing placeholders preserves local sensitive values.',
+  I18n.configJsonChoose: 'Choose JSON file (maximum 2 MiB)',
+  I18n.configJsonSave: 'Choose location and save',
+  I18n.configJsonSaved: 'JSON saved',
+  I18n.configJsonSavedValues: 'Exports settings saved on the backend, excluding unsaved edits.',
+  I18n.configJsonImported: 'Imported. Review settings before manually enabling tasks.',
+  I18n.configJsonUnsaved: 'Save or cancel your unsaved parameter edits before importing JSON.',
+  I18n.taskJsonMenu: 'Task JSON backup and import',
+  I18n.taskJsonImport: 'Import task JSON',
+  I18n.taskJsonImportHelp: 'Updates only this task in this configuration, without linked changes. The configuration must be stopped. Its task enable state is preserved. Maximum 2 MiB.',
   I18n.logOut: 'Logout',
   I18n.zhCn: '简体中文',
   I18n.enUs: 'English',
@@ -42,6 +58,14 @@ final Map<String, String> _us_ui = {
       'The current script is running, please stop it before making modifications.',
   I18n.minimizeToSystemTrayHelp:
       'Minimized to the system tray when closing a window',
+  I18n.stopBackendOnExit: 'Stop OAS service on exit',
+  I18n.stopBackendOnExitHelp:
+      'When enabled, fully exiting OASX stops the currently connected OAS service and its tasks. Hiding to the system tray does not stop it. When disabled, the backend keeps running after OASX exits.',
+  I18n.exitBackendStopFailed: 'OAS service shutdown could not be confirmed',
+  I18n.exitBackendStopFailedHelp:
+      'Could not confirm whether the OAS service at @address has stopped. Keep OASX open to retry, or exit OASX only; the backend may still be running.',
+  I18n.exitKeepOpen: 'Keep OASX open',
+  I18n.exitFrontendOnly: 'Exit OASX only',
   I18n.launchAtStartupHelp: 'Launch OASX when you sign in',
   I18n.launchAtStartupUpdateFailed: 'Failed to update launch at startup',
   I18n.updateProxyUrl: 'Proxy URL',

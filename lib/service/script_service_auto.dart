@@ -3,6 +3,8 @@
 extension ScriptServiceAutoX on ScriptService {
   // 自动启动脚本时，执行中使用常驻进度提示，完成后切换为普通成功提示。
   Future<void> autoRunScript() async {
+    if (ProfileService.isPreview || _detached) return;
+    final generation = _backendGeneration;
     if (autoScriptList.isEmpty) return;
     final scriptList = List.of(autoScriptList);
     final psController = Get.put<ProgressSnackbarController>(
@@ -12,6 +14,7 @@ extension ScriptServiceAutoX on ScriptService {
     const minDelay = Duration(seconds: 4);
     final successScriptList = <String>[];
     for (final scriptName in scriptList) {
+      if (_detached || generation != _backendGeneration) break;
       var success = false;
       if (isRunning(scriptName)) {
         success = true;
@@ -69,6 +72,7 @@ extension ScriptServiceAutoX on ScriptService {
   }
 
   void updateAutoScript(String script, bool? isSelected) {
+    if (ProfileService.isPreview || _detached) return;
     if (isSelected == null) return;
     if (isSelected) {
       autoScriptList.add(script);
@@ -80,6 +84,10 @@ extension ScriptServiceAutoX on ScriptService {
   }
 
   void _loadAutoScriptListFromStorage() {
+    if (ProfileService.isPreview) {
+      autoScriptList.clear();
+      return;
+    }
     final raw = _storage.read(StorageKey.autoScriptList.name);
     if (raw is List) {
       autoScriptList.value = raw.map((e) => e.toString()).toList();

@@ -9,6 +9,7 @@ import 'package:oasx/modules/common/models/storage_key.dart';
 import 'package:oasx/modules/home/models/config_model.dart';
 import 'package:oasx/modules/home/models/taskitem_model.dart';
 import 'package:oasx/service/websocket_service.dart';
+import 'package:oasx/service/profile_service.dart';
 import 'package:oasx/translation/i18n_content.dart';
 import 'package:oasx/utils/extension_utils.dart';
 import 'package:oasx/utils/platform_utils.dart';
@@ -26,6 +27,9 @@ class ScriptService extends GetxService {
   final scriptModelMap = <String, ScriptModel>{}.obs;
   final scriptOrderList = <String>[].obs;
   final autoScriptList = <String>[].obs;
+  bool _detached = false;
+  int _backendGeneration = 0;
+  Future<void>? _detachFuture;
 
   bool get _shouldSkipBackendReload {
     return PlatformUtils.isWeb && !ApiClient().hasConfiguredBackendAddress;
@@ -40,18 +44,18 @@ class ScriptService extends GetxService {
 
   @override
   Future<void> onClose() async {
-    await Future.wait([
-      ...scriptModelMap.keys.map((e) => Future.wait([
-            stopScript(e),
-            wsService.close(e),
-            Get.delete<ScriptLogController>(tag: e, force: true),
-          ])),
-    ]);
-    scriptModelMap.clear();
+    await detach();
     super.onClose();
   }
 
+  /// Closing the client only detaches observers; tasks belong to the backend.
+  Future<void> detach() {
+    _detached = true;
+    return _detachFuture ??= resetDashboardState();
+  }
+
   void addScriptModel(dynamic sm) {
+    if (_detached) return;
     if (sm is String) {
       sm = ScriptModel(sm);
     }
@@ -84,8 +88,10 @@ class ScriptService extends GetxService {
   }
 
   void syncScriptOrder(Iterable<String> scripts) {
-    final normalized =
-        scripts.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final normalized = scripts
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
     scriptOrderList.value = normalized;
     for (final name in normalized) {
       if (!scriptModelMap.containsKey(name)) {
@@ -93,8 +99,9 @@ class ScriptService extends GetxService {
       }
     }
     final validSet = normalized.toSet();
-    final stale =
-        scriptModelMap.keys.where((e) => !validSet.contains(e)).toList();
+    final stale = scriptModelMap.keys
+        .where((e) => !validSet.contains(e))
+        .toList();
     for (final name in stale) {
       deleteScriptModel(name);
     }
@@ -132,20 +139,26 @@ class ScriptService extends GetxService {
   }
 
   Future<void> refreshScriptsFromServer() async {
+    if (_detached) return;
+    final generation = _backendGeneration;
     if (_shouldSkipBackendReload) {
       await resetDashboardState();
       return;
     }
     final latest = await ApiClient().getScriptList();
+    if (_detached || generation != _backendGeneration) return;
     syncScriptOrder(latest);
   }
 
   Future<void> reloadFromServer() async {
+    if (_detached) return;
+    final generation = _backendGeneration;
     if (_shouldSkipBackendReload) {
       await resetDashboardState();
       return;
     }
     final scriptList = await ApiClient().getScriptList();
+    if (_detached || generation != _backendGeneration) return;
     syncScriptOrder(scriptList);
     if (scriptList.isEmpty) {
       return;
@@ -154,7 +167,8 @@ class ScriptService extends GetxService {
   }
 
   Future<void> resetDashboardState() async {
-    await wsService.closeAll();
+    ++_backendGeneration;
+    final closing = wsService.closeAll();
     final names = scriptModelMap.keys.toList();
     for (final name in names) {
       if (Get.isRegistered<ScriptLogController>(tag: name)) {
@@ -165,5 +179,6 @@ class ScriptService extends GetxService {
     }
     scriptModelMap.clear();
     scriptOrderList.clear();
+    await closing;
   }
 }

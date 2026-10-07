@@ -3,45 +3,51 @@ part of 'websocket_service.dart';
 typedef MessageListener = void Function(dynamic message);
 
 enum WsStatus {
+  /// prepare to connect ws
   connecting,
+
+  /// ws connected
   connected,
+
+  /// ws closed but try to connect
   reconnecting,
+
+  /// ws closed
   closed,
+
+  /// ws error but may also connected
   error,
 }
 
 class WebSocketClient {
-  WebSocketClient({
-    required this.name,
-    required this.url,
-  });
-
   final String name;
   final String url;
 
   WebSocketChannel? _channel;
   final List<MessageListener> _listeners = [];
+  final ChannelConnector _connector;
+  Timer? _reconnectTimer;
+  int _connectionGeneration = 0;
   bool _shouldReconnect = true;
   int _reconnectCount = 0;
-  static const int maxReconnect = 3;
-  static const int maxReconnectAfterClosed = 2;
+  static const int maxReconnect = 5;
   final status = WsStatus.connecting.obs;
 
-  Future<void> send(String data) async {
+  WebSocketClient({
+    required this.name,
+    required this.url,
+    ChannelConnector? connector,
+  }) : _connector = connector ?? WebSocketChannel.connect;
+
+  void send(String data) {
     if (status.value == WsStatus.connected) {
-      try {
-        _channel?.sink.add(data);
-      } catch (e) {
-        printError(info: e.toString());
-        status.value = WsStatus.error;
-        await _reconnect();
-      }
+      _channel?.sink.add(data);
     } else {
       printInfo(info: "[$name] cannot send, status=${status.value}");
-      await _reconnect();
     }
   }
 
+  /// 发送消息收到第一条消息就立马返回,超时返回null
   Future<T?> sendAndWaitOnce<T>(
     String data, {
     T Function(dynamic msg)? onResult,
@@ -55,6 +61,8 @@ class WebSocketClient {
     );
   }
 
+  /// 发送消息等到check条件满足返回收到的消息,超时返回null
+  /// [onResult] 自定义转换返回结果,默认直接返回收到消息
   Future<T?> sendAndWaitUntil<T>(
     String data, {
     required Future<bool> Function(dynamic msg) check,
@@ -74,12 +82,15 @@ class WebSocketClient {
           }
           _removeListener(tmpListener);
         }
-      } catch (_) {}
+      } catch (e) {
+        // check 抛错忽略
+      }
     };
 
     _addListener(tmpListener);
     send(data);
 
+    // 超时处理
     Future.delayed(timeout, () {
       if (!completer.isCompleted) {
         completer.complete(null);
@@ -90,7 +101,12 @@ class WebSocketClient {
     return completer.future;
   }
 
+  /// process url and connect websocket
   Future<void> _connect() async {
+    if (!_shouldReconnect) return;
+    final generation = ++_connectionGeneration;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     try {
       status.value = WsStatus.connecting;
       var address = url;
@@ -98,40 +114,48 @@ class WebSocketClient {
         address = address.replaceAll('http://', '');
       }
       printInfo(info: "ws[$name] connecting to $address");
-      _channel = WebSocketChannel.connect(Uri.parse(address));
-      await _channel!.ready;
+      final channel = _connector(Uri.parse(address));
+      _channel = channel;
+      await channel.ready;
+      if (!_shouldReconnect || generation != _connectionGeneration) {
+        await channel.sink.close(
+          WebSocketStatus.normalClosure,
+          'stale connection',
+        );
+        return;
+      }
+
       status.value = WsStatus.connected;
+      _reconnectCount = 0;
       printInfo(info: "ws[$name] connected!");
 
-      _channel!.stream.listen(
+      channel.stream.listen(
         (msg) {
+          if (!_shouldReconnect || generation != _connectionGeneration) return;
           for (final listener in List.from(_listeners)) {
             listener(msg);
           }
         },
-        onDone: _reconnect,
-        onError: (e) async {
+        onDone: () {
+          if (generation == _connectionGeneration) _reconnect();
+        },
+        onError: (e) {
+          if (!_shouldReconnect || generation != _connectionGeneration) return;
           printError(info: "ws[$name] error: $e");
           status.value = WsStatus.error;
-          await _reconnect();
+          _reconnect();
         },
       );
-
-      _channel!.sink.done.then((_) async {
-        printInfo(info: "ws[$name] sink closed");
-        if (status.value != WsStatus.closed) {
-          status.value = WsStatus.closed;
-          await _reconnect();
-        }
-      });
-    } on SocketException catch (e) {
-      printError(info: "ws[$name] SocketException: $e");
+    } on SocketException {
+      if (!_shouldReconnect || generation != _connectionGeneration) return;
+      printError(info: "ws[$name] SocketException: $url");
       status.value = WsStatus.error;
-      await _reconnect();
+      _reconnect();
     } on Exception catch (e) {
+      if (!_shouldReconnect || generation != _connectionGeneration) return;
       printError(info: "ws[$name] Exception: $e");
       status.value = WsStatus.error;
-      await _reconnect();
+      _reconnect();
     }
   }
 
@@ -148,52 +172,46 @@ class WebSocketClient {
     printInfo(info: "ws[$name] listener removed");
   }
 
+  /// close websocket and clear message listeners
+  /// reconnect(optional): default false to stop reconnect websocket
   Future<void> _close(int code, String reason, {bool reconnect = false}) async {
     _shouldReconnect = reconnect;
-    try {
-      await _channel?.sink.close(code, reason);
-    } catch (e) {
-      printError(info: e.toString());
-    }
+    ++_connectionGeneration;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    final channel = _channel;
+    _channel = null;
     status.value = WsStatus.closed;
     _listeners.clear();
+    try {
+      await channel?.sink.close(code, reason);
+    } catch (e) {
+      printError(info: 'ws[$name] close error: $e');
+    }
     printInfo(info: "ws[$name] closed: $reason");
   }
 
-  Future<void> _reconnect() async {
+  /// reconnect webSocket when should reconnect. interval 2s
+  void _reconnect() {
     if (!_shouldReconnect) {
-      printInfo(info: "ws[$name] not should reconnect");
+      printInfo(info: "ws[$name] reconnect, but forbid to reconnect");
       status.value = WsStatus.closed;
       return;
     }
-    if (status.value == WsStatus.connected ||
-        status.value == WsStatus.connecting ||
-        status.value == WsStatus.reconnecting) {
-      return;
-    }
+    if (_reconnectTimer?.isActive == true) return;
     _reconnectCount++;
     if (_reconnectCount > maxReconnect) {
-      printError(
-          info: "ws[$name] reconnect failed more than $maxReconnect times");
-      if (status.value != WsStatus.closed) {
-        printError(info: 'ws[$name] try close and reconnect');
-        await _close(
-          WebSocketStatus.normalClosure,
-          'client try connect, but failed',
-        ).timeout(const Duration(seconds: 2), onTimeout: () => false);
-      }
-      status.value = WsStatus.closed;
-      if (_reconnectCount > maxReconnect + maxReconnectAfterClosed) {
-        _reconnectCount = 0;
-        printError(info: 'ws[$name] try reconnect after closed failed, finish');
-        return;
-      }
+      printInfo(
+        info: "ws[$name] reconnect failed more than $maxReconnect times",
+      );
+      status.value = WsStatus.error;
+      return;
     }
     printInfo(info: "ws[$name] reconnecting... ($_reconnectCount)");
     status.value = WsStatus.reconnecting;
-    Future.delayed(
-      Duration(seconds: _reconnectCount <= 1 ? 0 : 2),
-      () => _connect(),
-    );
+    _reconnectTimer = Timer(const Duration(seconds: 2), () {
+      _reconnectTimer = null;
+      if (_shouldReconnect) _connect();
+    });
   }
 }

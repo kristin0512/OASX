@@ -22,7 +22,10 @@ extension ApiClientScriptX on ApiClient {
     final res = await request(
       () => put(
         '/$scriptName/$taskName/$groupName/$argumentName/value',
-        queryParameters: {'types': type, 'value': value},
+        queryParameters: {
+          'types': type == 'multi_enum' ? 'string' : type,
+          'value': type == 'multi_enum' ? jsonEncode(value) : value,
+        },
       ),
     );
     return res.isSuccess && res.data == true;

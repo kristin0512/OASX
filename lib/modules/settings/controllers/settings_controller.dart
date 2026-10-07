@@ -9,6 +9,7 @@ import 'package:oasx/config/global.dart';
 import 'package:oasx/modules/home/controllers/dashboard_controller.dart';
 import 'package:oasx/modules/common/models/storage_key.dart';
 import 'package:oasx/service/script_service.dart';
+import 'package:oasx/service/profile_service.dart';
 import 'package:oasx/translation/i18n_content.dart';
 import 'package:oasx/utils/check_version.dart';
 import 'package:oasx/utils/platform_utils.dart';
@@ -29,10 +30,16 @@ class SettingsController extends GetxController {
   @override
   void onInit() {
     autoLoginAfterDeploy.value =
-        storage.read(StorageKey.autoLoginAfterDeploy.name) ?? false;
-    autoDeploy.value = (storage.read(StorageKey.autoDeploy.name) ?? false) &&
+        !ProfileService.isPreview &&
+        (storage.read(StorageKey.autoLoginAfterDeploy.name) ?? false);
+    autoDeploy.value =
+        !ProfileService.isPreview &&
+        (storage.read(StorageKey.autoDeploy.name) ?? false) &&
         PlatformUtils.isDesktop;
-    address.value = storage.read(StorageKey.address.name) ?? '';
+    address.value = ProfileService.isPreview
+        ? ProfileService.previewAddress
+        : storage.read(StorageKey.address.name) ??
+              ProfileService.defaultAddress;
     updateProxyUrl.value = storage.read(StorageKey.updateProxyUrl.name) ?? '';
     username.value = storage.read(StorageKey.username.name) ?? '';
     password.value = storage.read(StorageKey.password.name) ?? '';
@@ -57,19 +64,28 @@ class SettingsController extends GetxController {
   }
 
   void updateAutoLoginAfterDeploy(bool nv) {
+    if (ProfileService.isPreview) return;
     autoLoginAfterDeploy.value = nv;
     storage.write(StorageKey.autoLoginAfterDeploy.name, nv);
   }
 
   void updateAutoDeploy(bool nv) {
+    if (ProfileService.isPreview) return;
     autoDeploy.value = nv;
     storage.write(StorageKey.autoDeploy.name, nv);
   }
 
   void updateAddress(String value) {
-    final next = value.trim();
+    final next = ProfileService.isPreview
+        ? ProfileService.previewAddress
+        : value.trim();
     if (address.value == next) {
       return;
+    }
+    // Detach synchronously before publishing the new endpoint. Pending loads
+    // carry a generation token and cannot restore the old backend's models.
+    if (Get.isRegistered<ScriptService>()) {
+      unawaited(Get.find<ScriptService>().resetDashboardState());
     }
     address.value = next;
     storage.write(StorageKey.address.name, address.value);
@@ -120,7 +136,8 @@ class SettingsController extends GetxController {
       ApiClient().resetAddress();
       return;
     }
-    final normalized = address.value.startsWith('http://') ||
+    final normalized =
+        address.value.startsWith('http://') ||
             address.value.startsWith('https://')
         ? address.value
         : 'http://${address.value}';
@@ -131,6 +148,7 @@ class SettingsController extends GetxController {
     bool showTip = true,
     bool resetDashboardToDisconnected = true,
   }) async {
+    if (ProfileService.isPreview) return false;
     final success = await ApiClient().killServer();
     if (success) {
       if (resetDashboardToDisconnected) {
@@ -148,9 +166,9 @@ class SettingsController extends GetxController {
     }
     if (Get.isRegistered<ScriptService>()) {
       try {
-        await Get.find<ScriptService>()
-            .resetDashboardState()
-            .timeout(const Duration(seconds: 5));
+        await Get.find<ScriptService>().resetDashboardState().timeout(
+          const Duration(seconds: 5),
+        );
       } catch (_) {}
     }
   }
