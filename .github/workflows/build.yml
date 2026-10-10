@@ -1,0 +1,43 @@
+name: Build OASX for Windows
+
+on:
+  push:
+    branches: [ "*" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.19.x' # 你可以根据需要调整版本，或留空用最新稳定版
+        channel: 'stable'
+        cache: true
+
+    - name: Enable Windows Desktop
+      run: flutter config --enable-windows-desktop
+
+    - name: Run Build Script
+      shell: pwsh
+      run: |
+        # 如果项目里有作者的打包脚本，直接调用它
+        if (Test-Path ".\dev_tools\build_windows.ps1") {
+            .\dev_tools\build_windows.ps1
+        } else {
+            flutter pub get
+            flutter build windows --release
+        }
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: OASX-Windows-Release
+        path: |
+          dist/release/
+          build/windows/runner/Release/
