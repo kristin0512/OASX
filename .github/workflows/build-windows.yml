@@ -1,0 +1,56 @@
+name: Build OASX for Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.1'
+          channel: stable
+          cache: true
+
+      - name: Show toolchain versions
+        shell: pwsh
+        run: |
+          flutter --version
+          flutter doctor -v
+
+      - name: Build Windows release
+        shell: pwsh
+        run: |
+          & .\dev_tools\build_windows.ps1 -Flutter flutter
+          if ($LASTEXITCODE -ne 0) { throw 'OASX Windows build failed.' }
+          if (-not (Test-Path '.\dist\release\oasx.exe')) {
+            throw 'Build completed but dist\release\oasx.exe was not found.'
+          }
+
+      - name: Package release files
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path '.\dist\release\*' `
+            -DestinationPath '.\dist\OASX-Windows-release.zip' `
+            -CompressionLevel Optimal `
+            -Force
+
+      - name: Upload Windows build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: OASX-Windows-release
+          path: dist/OASX-Windows-release.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
