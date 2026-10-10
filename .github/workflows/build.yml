@@ -5,40 +5,48 @@ on:
     branches: [ "*" ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.47.5' # 你可以根据需要调整版本，或留空用最新稳定版
-        channel: 'stable'
-        cache: true
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.1'
+          channel: stable
+          cache: true
 
-    - name: Enable Windows Desktop
-      run: flutter config --enable-windows-desktop
+      - name: Verify required source files
+        shell: pwsh
+        run: |
+          if (-not (Test-Path '.\pubspec.lock')) {
+            throw 'pubspec.lock is missing. Do not delete it; the project build script requires it.'
+          }
+          if (-not (Test-Path '.\dev_tools\build_windows.ps1')) {
+            throw 'dev_tools\build_windows.ps1 was not found.'
+          }
 
-    - name: Run Build Script
-      shell: pwsh
-      run: |
-        # 如果项目里有作者的打包脚本，直接调用它
-        Remove-Item pubspec.lock -ErrorAction Ignore
-        if (Test-Path ".\dev_tools\build_windows.ps1") {
-            .\dev_tools\build_windows.ps1
-        } else {
-            flutter pub get
-            flutter build windows --release
-        }
+      - name: Run Build Script
+        shell: pwsh
+        run: |
+          & .\dev_tools\build_windows.ps1 -Flutter flutter
+          if ($LASTEXITCODE -ne 0) { throw 'OASX Windows build failed.' }
+          if (-not (Test-Path '.\dist\release\oasx.exe')) {
+            throw 'Build completed but dist\release\oasx.exe was not found.'
+          }
 
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: OASX-Windows-Release
-        path: |
-          dist/release/
-          build/windows/runner/Release/
+      - name: Upload Windows release
+        uses: actions/upload-artifact@v4
+        with:
+          name: OASX-Windows-Release
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 14
