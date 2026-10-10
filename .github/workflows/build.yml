@@ -27,6 +27,7 @@ jobs:
       shell: pwsh
       run: |
         # 如果项目里有作者的打包脚本，直接调用它
+        Remove-Item pubspec.lock -ErrorAction Ignore
         if (Test-Path ".\dev_tools\build_windows.ps1") {
             .\dev_tools\build_windows.ps1
         } else {
