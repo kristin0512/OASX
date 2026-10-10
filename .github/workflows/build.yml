@@ -10,7 +10,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Flutter 3.35.1 expects Visual Studio 2022; windows-latest now maps to VS 2026.
+    runs-on: windows-2022
     timeout-minutes: 45
 
     steps:
@@ -23,6 +24,16 @@ jobs:
           flutter-version: '3.35.1'
           channel: stable
           cache: true
+
+      - name: Show build toolchain
+        shell: pwsh
+        run: |
+          flutter --version
+          flutter doctor -v
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (Test-Path $vswhere) {
+            & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          }
 
       - name: Verify required source files
         shell: pwsh
